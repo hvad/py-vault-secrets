@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "pylint>=2.8.2"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = { attr = "py_vault_secrets.__version__" }
+
+[project]
+name = "xgs-vault-secrets"
+dynamic = ["version"]
+license = { file = "LICENSE" }
+authors = [{ name = "David Hannequin", email = "david.hannequin@gmail.com" }]
+description = "Vault secrets management tool"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+dependencies = ["cryptography >= 41.0.7", "rich >= 14.1.0"]
+
+
+[project.urls]
+"Homepage" = "https://github.com/hvad/py-vault-secrets"
+"Bug Tracker" = "https://github.com/hvad/py-vault-secrets/issues"
