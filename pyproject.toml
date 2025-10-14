@@ -9,7 +9,7 @@ where = ["src"]
 version = { attr = "py_vault_secrets.__version__" }
 
 [project]
-name = "xgs-vault-secrets"
+name = "py-vault-secrets"
 dynamic = ["version"]
 license = { file = "LICENSE" }
 authors = [{ name = "David Hannequin", email = "david.hannequin@gmail.com" }]

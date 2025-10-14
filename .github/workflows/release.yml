@@ -39,12 +39,6 @@ jobs:
         # Use 'build' to create the .tar.gz and .whl files in 'dist/'
         run: python -m build
 
-      - name: Check Release Permission
-        run: |
-          gh release create test-tag --notes "Test release" || echo "No permission"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Create GitHub Release
         # Creates the release on GitHub
         id: create_release
