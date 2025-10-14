@@ -1,4 +1,4 @@
-# XGS Vault Secrets CLI
+# Python Vault Secrets CLI
 
 ## Overview
 
