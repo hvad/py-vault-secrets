@@ -54,4 +54,4 @@ jobs:
           files: dist/*
         env:
           # The GITHUB_TOKEN is automatically injected by GitHub
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
