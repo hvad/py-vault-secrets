@@ -42,7 +42,7 @@ jobs:
       - name: Create GitHub Release
         # Creates the release on GitHub
         id: create_release
-        uses: softprops/action-gh-release@v2
+        uses: actions/create-release@v1
         with:
           # The version is the name of the tag (e.g., v1.0.0)
           tag_name: ${{ github.ref_name }}
@@ -54,4 +54,4 @@ jobs:
           files: dist/*
         env:
           # The GITHUB_TOKEN is automatically injected by GitHub
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
