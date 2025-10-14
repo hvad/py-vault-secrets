@@ -4,12 +4,13 @@
 #   Authors:
 #       David Hannequin <david.hannequin@gmail.com>
 #   Date : 2025-10-03
+#   Updated: 2025-10-14 (Added Label functionality)
 
 
 import sys
 import argparse
 from getpass import getpass
-from typing import List
+from typing import List, Dict, Any
 
 # UI and Tools
 from rich.table import Table
@@ -24,9 +25,10 @@ from config import console
 # Command Line Interface (CLI/rich)
 # ----------------------------------------------------------------------
 
-def display_secrets(keys: List[str]):
-    """Displays the list of secret keys in a rich table."""
-    if not keys:
+
+def display_secrets(secrets_data: List[Dict[str, Any]]):
+    """Displays the list of secret keys and their labels in a rich table."""
+    if not secrets_data:
         console.print(
             "[bold yellow]The vault is empty. Nothing to display.[/bold yellow]"
         )
@@ -35,9 +37,14 @@ def display_secrets(keys: List[str]):
     table = Table(title="Stored Secrets", style="bold cyan")
     table.add_column("Index", style="dim", justify="right")
     table.add_column("Secret Key", style="bold white")
+    # New column for labels
+    table.add_column("Labels", style="italic yellow")
 
-    for i, key in enumerate(keys):
-        table.add_row(str(i + 1), key)
+    for i, data in enumerate(secrets_data):
+        labels_str = ", ".join(data["labels"])
+        table.add_row(
+            str(i + 1), data["key"], labels_str if labels_str else "[dim]None[/dim]"
+        )
 
     console.print(table)
 
@@ -48,8 +55,7 @@ def prompt_for_new_secret(manager: SecretManager):
 
     key = Prompt.ask("Key (Service/Account Name)").strip()
     if not key:
-        console.print(
-            "[bold red]Operation cancelled: Key is mandatory.[/bold red]")
+        console.print("[bold red]Operation cancelled: Key is mandatory.[/bold red]")
         return
 
     # Check if key already exists before prompting for password
@@ -60,13 +66,16 @@ def prompt_for_new_secret(manager: SecretManager):
         return
 
     value = Prompt.ask("Value (Password/Token)", password=True)
-
     if not value:
-        console.print(
-            "[bold red]Operation cancelled: Value is mandatory.[/bold red]")
+        console.print("[bold red]Operation cancelled: Value is mandatory.[/bold red]")
         return
 
-    manager.add_secret(key, value)
+    # Prompt for labels (optional)
+    labels = Prompt.ask(
+        "Labels (comma-separated, e.g., 'work, social') [optional]"
+    ).strip()
+
+    manager.add_secret(key, value, labels)
 
 
 def prompt_for_modification(manager: SecretManager):
@@ -84,19 +93,31 @@ def prompt_for_modification(manager: SecretManager):
     if key not in manager.secrets:
         console.print(
             f"[bold red] Key '{
-                key}' does not exist. Modification impossible.[/bold red]"
+                key
+            }' does not exist. Modification impossible.[/bold red]"
         )
         return
 
-    new_value = Prompt.ask("New Value (Password/Token)", password=True)
+    # Get current labels for display
+    current_labels = ", ".join(manager.secrets[key].labels)
 
-    if not new_value:
-        console.print(
-            "[bold red]Operation cancelled: New value is mandatory.[/bold red]"
-        )
-        return
+    # Prompt for new value (optional)
+    new_value_input = Prompt.ask(
+        "New Value (Password/Token) [leave blank to keep current]", password=True
+    )
+    new_value = new_value_input if new_value_input else None
 
-    manager.modify_secret(key, new_value)
+    # Prompt for new labels (optional)
+    # The user enters the full list of labels they want the secret to have
+    new_labels_input = Prompt.ask(
+        f"New Labels (comma-separated) [current: {
+            current_labels
+        } | leave blank to keep current]"
+    ).strip()
+    new_labels = new_labels_input if new_labels_input else None
+
+    # modify_secret handles the case where both are None
+    manager.modify_secret(key, new_value, new_labels)
 
 
 def handle_interactive_mode(manager: SecretManager):
@@ -111,8 +132,9 @@ def handle_interactive_mode(manager: SecretManager):
         )
 
         console.print("[bold white]Actions :[/bold white]")
+        # Updated description for L and S
         console.print(
-            "  [green]A[/green]dd | [blue]M[/blue]odify | [magenta]D[/magenta]elete | [cyan]L[/cyan]ist | [yellow]V[/yellow]iew | [red]S[/red]earch | [bold red]Q[/bold red]uit"
+            "  [green]A[/green]dd | [blue]M[/blue]odify | [magenta]D[/magenta]elete | [cyan]L[/cyan]ist (Keys & Labels) | [yellow]V[/yellow]iew (Value) | [red]S[/red]earch (Key/Label) | [bold red]Q[/bold red]uit"
         )
 
         choice = Prompt.ask(
@@ -135,7 +157,8 @@ def handle_interactive_mode(manager: SecretManager):
             manager.delete_secret(key_to_delete)
 
         elif choice == "l":
-            display_secrets(manager.list_keys())
+            # Display keys AND labels
+            display_secrets(manager.list_secrets_with_labels())
 
         elif choice == "v":
             key_to_view = Prompt.ask(
@@ -149,8 +172,7 @@ def handle_interactive_mode(manager: SecretManager):
 
             value = manager.display_value(key_to_view)
             if value is None:
-                console.print(f"[bold red] Key '{
-                              key_to_view}' not found.[/bold red]")
+                console.print(f"[bold red] Key '{key_to_view}' not found.[/bold red]")
             else:
                 # Use print for clean output, avoiding rich formatting issues for copy/paste
                 print(f"\nDecrypted value for '{key_to_view}': {value}")
@@ -159,26 +181,29 @@ def handle_interactive_mode(manager: SecretManager):
                 )
 
         elif choice == "s":
-            term = Prompt.ask("Search term").strip()
+            term = Prompt.ask("Search term (Key or Label)").strip()
             if not term:
                 console.print(
                     "[bold red]Operation cancelled: Search term cannot be empty.[/bold red]"
                 )
                 continue
 
-            results = manager.search_secret(term)
+            # Search in both key and labels
+            results = manager.search_secret(term, search_labels=True)
             if results:
                 console.print(f"Search results for '{term}':")
-                display_secrets([s.key for s in results])
+                # Format results for display
+                results_data = [
+                    {"key": s.key, "labels": sorted(list(s.labels))} for s in results
+                ]
+                display_secrets(results_data)
             else:
                 console.print(
-                    f"[bold yellow]No secrets found matching '{
-                        term}'.[/bold yellow]"
+                    f"[bold yellow]No secrets found matching '{term}'.[/bold yellow]"
                 )
 
         elif choice == "q":
-            console.print(
-                "[bold green]Goodbye! The vault is locked.[/bold green]")
+            console.print("[bold green]Goodbye! The vault is locked.[/bold green]")
             break
 
 
@@ -190,10 +215,10 @@ def main():
         epilog="Run without arguments for interactive mode or use --help for direct commands.",
     )
 
-    subparsers = parser.add_subparsers(
-        dest="command", help="Available direct commands")
+    subparsers = parser.add_subparsers(dest="command", help="Available direct commands")
 
-    subparsers.add_parser("list", help="List all secret keys.")
+    # Updated description
+    subparsers.add_parser("list", help="List all secret keys and their labels.")
     subparsers.add_parser(
         "interactive",
         help="Launch the interactive interface (default if no arguments).",
@@ -203,9 +228,15 @@ def main():
     # Added required=True for clarity in direct commands
     parser_add.add_argument("key", type=str, help="Key of the secret.")
     parser_add.add_argument("value", type=str, help="Value of the secret.")
+    # New argument for labels
+    parser_add.add_argument(
+        "--labels",
+        type=str,
+        default="",
+        help="Comma-separated labels for the secret (e.g., 'work, social').",
+    )
 
-    parser_del = subparsers.add_parser(
-        "delete", help="Delete a secret (directly).")
+    parser_del = subparsers.add_parser("delete", help="Delete a secret (directly).")
     parser_del.add_argument("key", type=str, help="Key of the secret to delete.")
 
     parser_get = subparsers.add_parser(
@@ -214,8 +245,11 @@ def main():
     parser_get.add_argument("key", type=str, help="Key of the secret to view.")
 
     parser_search = subparsers.add_parser(
-        "search", help="Search secrets by key.")
-    parser_search.add_argument("term", type=str, help="Search term (partial match).")
+        "search", help="Search secrets by key or label."
+    )  # Updated description
+    parser_search.add_argument(
+        "term", type=str, help="Search term (partial match in key or label)."
+    )
 
     args = parser.parse_args()
 
@@ -233,7 +267,6 @@ def main():
         console.print(f"[bold red] Initialization Error: {e}[/bold red]")
         sys.exit(1)
 
-
     # --- Execution Mode ---
 
     command = args.command
@@ -244,30 +277,37 @@ def main():
 
     if command != "interactive":
         if command == "list":
-            display_secrets(manager.list_keys())
+            # List secrets with labels
+            display_secrets(manager.list_secrets_with_labels())
 
         elif command == "add":
-            manager.add_secret(args.key, args.value)
+            # Pass labels argument
+            manager.add_secret(args.key, args.value, args.labels)
 
         elif command == "delete":
             manager.delete_secret(args.key)
 
         elif command == "search":
-            results = manager.search_secret(args.term)
+            # Search in both key and labels
+            results = manager.search_secret(args.term, search_labels=True)
             if results:
                 console.print(f"Search results for '{args.term}':")
-                display_secrets([s.key for s in results])
+                # Format results for display
+                results_data = [
+                    {"key": s.key, "labels": sorted(list(s.labels))} for s in results
+                ]
+                display_secrets(results_data)
             else:
                 console.print(
                     f"[bold yellow]No secrets found matching '{
-                        args.term}'.[/bold yellow]"
+                        args.term
+                    }'.[/bold yellow]"
                 )
 
         elif command == "view":
             value = manager.display_value(args.key)
             if value is None:
-                console.print(f"[bold red] Key '{
-                              args.key}' not found.[/bold red]")
+                console.print(f"[bold red] Key '{args.key}' not found.[/bold red]")
             else:
                 # Use print for clean output, avoiding rich formatting for easy copy/paste
                 print(f"\nDecrypted value for '{args.key}': {value}")
@@ -286,6 +326,7 @@ if __name__ == "__main__":
     except Exception as e:
         # Catch unexpected errors gracefully
         console.print(
-            f"\n[bold red]An unexpected fatal error occurred: {e}[/bold red]", file=sys.stderr
+            f"\n[bold red]An unexpected fatal error occurred: {e}[/bold red]",
+            file=sys.stderr,
         )
         sys.exit(1)
