@@ -1,6 +1,6 @@
 # (Draft) Python Vault Secrets CLI
 
-**Warning** Not for production use
+**Warning** Not for production use.
 This code/package is for testing, development, or educational purposes only and 
 should not be deployed in a live production environment.
 
