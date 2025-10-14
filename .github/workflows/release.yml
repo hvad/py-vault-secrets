@@ -53,5 +53,5 @@ jobs:
           # Uploads the files from the 'dist/' directory as release assets
           files: dist/*
         env:
-          # The GITHUB_TOKEN is automatically injected by GitHub
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          # The GITHUB_TOKEN is automatically injected by GitHub Actions
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
