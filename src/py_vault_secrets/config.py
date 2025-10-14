@@ -4,6 +4,7 @@
 #   Authors:
 #       David Hannequin <david.hannequin@gmail.com>
 #   Date : 2025-10-03
+#   Updated: 2025-10-14 (Added Label functionality)
 
 
 from pathlib import Path

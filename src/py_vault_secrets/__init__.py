@@ -4,4 +4,4 @@
 #   Authors:
 #       David Hannequin <david.hannequin@gmail.com>
 #   Date : 2025-10-03
-__version__ = "0.0.3"
+__version__ = "0.0.4"

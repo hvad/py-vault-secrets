@@ -1,7 +1,7 @@
 # (Draft) Python Vault Secrets CLI
 
 **Warning** Not for production use.
-This code/package is for testing, development, or educational purposes only and 
+This code/package is for testing, development, or educational purposes only and
 should not be deployed in a live production environment.
 
 ## Overview
@@ -79,6 +79,7 @@ and searching for secrets.
 interactive mode.
 - **Rich Formatting**: Enhanced visual representation of secret lists and messages.
 - **Authentication**: Secure authentication using a master password.
+- **Labels**: Add labels in interactive mode to enhanced search.
 
 ## Contributing
 
@@ -87,4 +88,3 @@ Contributions are welcome! Feel free to open issues or submit pull requests.
 ## License
 
 This project is licensed under the Apache License.
-
