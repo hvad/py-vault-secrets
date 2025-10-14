@@ -10,6 +10,9 @@ on:
   # Allows you to run this workflow manually from the GitHub Actions interface
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build_and_release:
     runs-on: ubuntu-latest
