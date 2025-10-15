@@ -5,12 +5,13 @@
 #       David Hannequin <david.hannequin@gmail.com>
 #   Date : 2025-10-03
 #   Updated: 2025-10-14 (Added Label functionality)
+#   Updated: 2025-10-15 (Added import_secrets_from_data for CSV import)
 
 
 import base64
 import json
 import secrets
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Any
 from pathlib import Path
 
 # Security and Crypto
@@ -23,6 +24,7 @@ from config import console, ITERATIONS, FILE_NAME, SALT_FILE, KEY_LENGTH
 
 
 # --- Secret Classes and Manager ---
+
 
 class Secret:
     """Represents a key-value entry in the manager, now including labels."""
@@ -113,41 +115,37 @@ class SecretManager:
         try:
             # Handle the updated data structure (encrypted content is now a JSON string containing value and labels)
             for encrypted_key, encrypted_content in encrypted_data.items():
-                
                 # 1. Decrypt the key and content
                 decrypted_key = self._decrypt(encrypted_key)
                 decrypted_content_str = self._decrypt(encrypted_content)
-                
+
                 # 2. Parse the content JSON
                 secret_content = json.loads(decrypted_content_str)
-                
+
                 # 3. Extract key, value, and labels
                 value = secret_content["value"]
                 # Use .get for labels to support backward compatibility if needed
-                labels = secret_content.get("labels", []) 
-                
+                labels = secret_content.get("labels", [])
+
                 self._secrets[decrypted_key] = Secret(decrypted_key, value, labels)
         except Exception:
             # This is the critical authentication check point
-            raise ValueError(
-                "Invalid Master Password or Corrupt Data."
-            )
+            raise ValueError("Invalid Master Password or Corrupt Data.")
 
     def _save_secrets(self):
         """Encrypts and saves all secrets."""
         encrypted_data: Dict[str, str] = {}
         for secret in self._secrets.values():
-            
             # 1. Create the content dictionary (must be JSON serializable)
             content_to_store = {
                 "value": secret.value,
                 # Convert the set of labels to a list for JSON serialization
-                "labels": sorted(list(secret.labels)) 
+                "labels": sorted(list(secret.labels)),
             }
-            
+
             # 2. Serialize and Encrypt the content
             encrypted_content = self._encrypt(json.dumps(content_to_store))
-            
+
             # 3. Encrypt the key and add to the dictionary
             encrypted_data[self._encrypt(secret.key)] = encrypted_content
 
@@ -157,27 +155,85 @@ class SecretManager:
         with Path(FILE_NAME).open("w") as f:
             json.dump(encrypted_data, f, indent=4)
 
+    # --- Utility methods for labels ---
+    def _parse_labels(self, labels_str: Optional[str]) -> List[str]:
+        """Parses a comma-separated string into a list of clean, lower-cased labels."""
+        return [l.strip().lower() for l in (labels_str or "").split(",") if l.strip()]
+
     # --- CRUD Operations (Concise and Pythonic) ---
 
     def add_secret(self, key: str, value: str, labels: Optional[str] = None):
         """Adds a new secret."""
         if key in self._secrets:
             console.print(
-                f"[bold yellow] Key '{
-                    key}' already exists. Use 'modify'.[/bold yellow]"
+                f"[bold yellow] Key '{key}' already exists. Use 'modify'.[/bold yellow]"
             )
             return
-            
-        # Parse the comma-separated labels string into a list/set of clean, lower-cased labels
-        parsed_labels = [l.strip().lower() for l in (labels or "").split(',') if l.strip()]
+
+        parsed_labels = self._parse_labels(labels)
 
         new_secret = Secret(key, value, parsed_labels)
         self._secrets[key] = new_secret
         self._save_secrets()
-        console.print(f"[bold green] Secret '{key}' added with labels: {', '.join(new_secret.labels)}.[/bold green]")
+        console.print(
+            f"[bold green] Secret '{key}' added with labels: {
+                ', '.join(new_secret.labels)
+            }.[/bold green]"
+        )
 
+    def import_secrets_from_data(self, secrets_data: List[Dict[str, Any]]) -> int:
+        """
+        Adds multiple secrets from a list of dicts.
+        Dicts must have 'key', 'value', and 'labels' (str, comma-separated).
+        Returns the number of secrets successfully imported.
+        """
 
-    def modify_secret(self, key: str, new_value: Optional[str] = None, new_labels: Optional[str] = None):
+        imported_count = 0
+
+        for data in secrets_data:
+            key = data.get("key")
+            value = data.get("value")
+            labels_str = data.get("labels", "")  # Labels can be empty
+
+            if not key or not value:
+                console.print(
+                    f"[bold yellow] Skipping malformed entry (missing key or value): {
+                        data
+                    }[/bold yellow]"
+                )
+                continue
+
+            if key in self._secrets:
+                console.print(
+                    f"[bold yellow] Skipping import: Key '{
+                        key
+                    }' already exists.[/bold yellow]"
+                )
+                continue
+
+            parsed_labels = self._parse_labels(labels_str)
+
+            self._secrets[key] = Secret(key, value, parsed_labels)
+            imported_count += 1
+
+        if imported_count > 0:
+            self._save_secrets()
+            console.print(
+                f"[bold green] Successfully imported {
+                    imported_count
+                } new secret(s).[/bold green]"
+            )
+        else:
+            console.print("[bold yellow] No new secrets were imported.[/bold yellow]")
+
+        return imported_count
+
+    def modify_secret(
+        self,
+        key: str,
+        new_value: Optional[str] = None,
+        new_labels: Optional[str] = None,
+    ):
         """Modifies the value and/or labels of an existing secret."""
         if key not in self._secrets:
             console.print(f"[bold red] Key '{key}' does not exist.[/bold red]")
@@ -193,27 +249,28 @@ class SecretManager:
 
         if new_labels is not None:
             # Replace existing labels with new ones
-            parsed_labels = {l.strip().lower() for l in new_labels.split(',') if l.strip()}
+            parsed_labels = set(self._parse_labels(new_labels))
             secret.labels = parsed_labels
             modified = True
-            console.print(f"[bold blue] Labels of '{key}' modified to: {', '.join(secret.labels)}.[/bold blue]")
+            console.print(
+                f"[bold blue] Labels of '{key}' modified to: {
+                    ', '.join(secret.labels)
+                }.[/bold blue]"
+            )
 
         if modified:
             self._save_secrets()
         else:
             console.print("[bold yellow] Nothing to modify.[/bold yellow]")
 
-
     def delete_secret(self, key: str):
         """Deletes a secret by its key."""
         if key in self._secrets:
             del self._secrets[key]
             self._save_secrets()
-            console.print(f"[bold magenta]🗑️ Secret '{
-                          key}' deleted.[/bold magenta]")
+            console.print(f"[bold magenta]🗑️ Secret '{key}' deleted.[/bold magenta]")
         else:
-            console.print(f"[bold red] Key '{
-                          key}' does not exist.[/bold red]")
+            console.print(f"[bold red] Key '{key}' does not exist.[/bold red]")
 
     def search_secret(self, term: str, search_labels: bool = True) -> List[Secret]:
         """Searches for secrets by key (partial match) and/or by label."""
@@ -231,7 +288,7 @@ class SecretManager:
 
             if key_match or label_match:
                 results.append(secret)
-                
+
         return results
 
     def list_secrets_with_labels(self) -> List[Dict[str, any]]:
@@ -242,7 +299,7 @@ class SecretManager:
             for secret in self._secrets.values()
         ]
         # Sort by key
-        return sorted(data, key=lambda x: x['key'])
+        return sorted(data, key=lambda x: x["key"])
 
     def list_keys(self) -> List[str]:
         """Lists all secret keys (only keys)."""
