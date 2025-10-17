@@ -59,6 +59,19 @@ python cli.py view my_service
 python cli.py search service
 ```
 
+#### Import csv data file
+
+```bash
+python cli.py import data.csv
+```
+
+Data csv file import must be like below : 
+````csv
+key,value,labels
+github_token,ghp_xxxxxxxx,work,dev
+personal_email,john.doe@example.com,social
+````
+
 ### Interactive Mode
 
 For more advanced interactions, you can enter the interactive mode by running
@@ -80,6 +93,7 @@ interactive mode.
 - **Rich Formatting**: Enhanced visual representation of secret lists and messages.
 - **Authentication**: Secure authentication using a master password.
 - **Labels**: Add labels in interactive mode to enhanced search.
+- **Import csv file data**: Add option to import csv file data
 
 ## Contributing
 

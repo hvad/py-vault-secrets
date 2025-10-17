@@ -5,10 +5,12 @@
 #       David Hannequin <david.hannequin@gmail.com>
 #   Date : 2025-10-03
 #   Updated: 2025-10-14 (Added Label functionality)
+#   Updated: 2025-10-15 (Added 'import' command for CSV)
 
 
 import sys
 import argparse
+import csv  # New import for CSV handling
 from getpass import getpass
 from typing import List, Dict, Any
 
@@ -43,7 +45,8 @@ def display_secrets(secrets_data: List[Dict[str, Any]]):
     for i, data in enumerate(secrets_data):
         labels_str = ", ".join(data["labels"])
         table.add_row(
-            str(i + 1), data["key"], labels_str if labels_str else "[dim]None[/dim]"
+            str(i +
+                1), data["key"], labels_str if labels_str else "[dim]None[/dim]"
         )
 
     console.print(table)
@@ -55,19 +58,22 @@ def prompt_for_new_secret(manager: SecretManager):
 
     key = Prompt.ask("Key (Service/Account Name)").strip()
     if not key:
-        console.print("[bold red]Operation cancelled: Key is mandatory.[/bold red]")
+        console.print(
+            "[bold red]Operation cancelled: Key is mandatory.[/bold red]")
         return
 
     # Check if key already exists before prompting for password
     if key in manager.secrets:
         console.print(
-            f"[bold yellow] Key '{key}' already exists. Use 'modify'.[/bold yellow]"
+            f"[bold yellow] Key '{
+                key}' already exists. Use 'modify'.[/bold yellow]"
         )
         return
 
     value = Prompt.ask("Value (Password/Token)", password=True)
     if not value:
-        console.print("[bold red]Operation cancelled: Value is mandatory.[/bold red]")
+        console.print(
+            "[bold red]Operation cancelled: Value is mandatory.[/bold red]")
         return
 
     # Prompt for labels (optional)
@@ -172,7 +178,8 @@ def handle_interactive_mode(manager: SecretManager):
 
             value = manager.display_value(key_to_view)
             if value is None:
-                console.print(f"[bold red] Key '{key_to_view}' not found.[/bold red]")
+                console.print(f"[bold red] Key '{
+                              key_to_view}' not found.[/bold red]")
             else:
                 # Use print for clean output, avoiding rich formatting issues for copy/paste
                 print(f"\nDecrypted value for '{key_to_view}': {value}")
@@ -199,12 +206,62 @@ def handle_interactive_mode(manager: SecretManager):
                 display_secrets(results_data)
             else:
                 console.print(
-                    f"[bold yellow]No secrets found matching '{term}'.[/bold yellow]"
+                    f"[bold yellow]No secrets found matching '{
+                        term}'.[/bold yellow]"
                 )
 
         elif choice == "q":
-            console.print("[bold green]Goodbye! The vault is locked.[/bold green]")
+            console.print(
+                "[bold green]Goodbye! The vault is locked.[/bold green]")
             break
+
+
+# NEW FUNCTION TO HANDLE CSV IMPORT
+def handle_import(manager: SecretManager, csv_path: str):
+    """Reads secrets from a CSV file and imports them."""
+    try:
+        with open(csv_path, mode="r", newline="", encoding="utf-8") as f:
+            # Use DictReader to treat the first row as headers
+            reader = csv.DictReader(f, fieldnames=["key", "value", "labels"])
+
+            # Skip the header row if present, assuming 'key' is the first field
+            # A more robust check might be needed, but for simplicity, we'll skip the first row
+            # if we assume the user provides the file path directly (not via stdin).
+            # We'll skip the first row only if it contains 'key', 'value', or 'labels' to handle headers.
+            secrets_data = list(reader)
+
+            if secrets_data and secrets_data[0].get("key", "").lower() == "key":
+                secrets_data.pop(0)  # Remove header row
+
+            # Clean up and ensure keys/values are strings, labels default to empty string
+            import_data = []
+            for row in secrets_data:
+                # Use .get to safely retrieve values, defaulting to empty string
+                key = row.get("key", "").strip()
+                value = row.get("value", "").strip()
+                labels = row.get("labels", "").strip()
+
+                if key and value:  # Only import if key and value are present
+                    import_data.append(
+                        {"key": key, "value": value, "labels": labels})
+
+            if not import_data:
+                console.print(
+                    "[bold yellow]CSV file contains no valid data rows (requires 'key' and 'value').[/bold yellow]"
+                )
+                return
+
+            manager.import_secrets_from_data(import_data)
+
+    except FileNotFoundError:
+        console.print(f"[bold red]Error: CSV file not found at '{
+                      csv_path}'[/bold red]")
+    except Exception as e:
+        console.print(
+            f"[bold red]An error occurred while reading or importing the CSV file: {
+                e
+            }[/bold red]"
+        )
 
 
 def main():
@@ -215,10 +272,12 @@ def main():
         epilog="Run without arguments for interactive mode or use --help for direct commands.",
     )
 
-    subparsers = parser.add_subparsers(dest="command", help="Available direct commands")
+    subparsers = parser.add_subparsers(
+        dest="command", help="Available direct commands")
 
     # Updated description
-    subparsers.add_parser("list", help="List all secret keys and their labels.")
+    subparsers.add_parser(
+        "list", help="List all secret keys and their labels.")
     subparsers.add_parser(
         "interactive",
         help="Launch the interactive interface (default if no arguments).",
@@ -236,8 +295,20 @@ def main():
         help="Comma-separated labels for the secret (e.g., 'work, social').",
     )
 
-    parser_del = subparsers.add_parser("delete", help="Delete a secret (directly).")
-    parser_del.add_argument("key", type=str, help="Key of the secret to delete.")
+    # NEW PARSER FOR IMPORT COMMAND
+    parser_import = subparsers.add_parser(
+        "import", help="Import secrets from a CSV file (format: key,value,labels)."
+    )
+    parser_import.add_argument(
+        "csv_path",
+        type=str,
+        help="Path to the CSV file containing secrets (columns: key, value, labels).",
+    )
+
+    parser_del = subparsers.add_parser(
+        "delete", help="Delete a secret (directly).")
+    parser_del.add_argument(
+        "key", type=str, help="Key of the secret to delete.")
 
     parser_get = subparsers.add_parser(
         "view", help="Display the decrypted value of a secret."
@@ -284,6 +355,10 @@ def main():
             # Pass labels argument
             manager.add_secret(args.key, args.value, args.labels)
 
+        elif command == "import":
+            # Handle the new import command
+            handle_import(manager, args.csv_path)
+
         elif command == "delete":
             manager.delete_secret(args.key)
 
@@ -307,7 +382,8 @@ def main():
         elif command == "view":
             value = manager.display_value(args.key)
             if value is None:
-                console.print(f"[bold red] Key '{args.key}' not found.[/bold red]")
+                console.print(f"[bold red] Key '{
+                              args.key}' not found.[/bold red]")
             else:
                 # Use print for clean output, avoiding rich formatting for easy copy/paste
                 print(f"\nDecrypted value for '{args.key}': {value}")
